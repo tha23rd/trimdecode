@@ -1,0 +1,17 @@
+[package]
+name = "trimdecode"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Decode audio files to f32 on ffmpeg's timeline: encoder delay and padding trimmed, so times line up to the sample"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tha23rd/trimdecode"
+homepage = "https://github.com/tha23rd/trimdecode"
+documentation = "https://docs.rs/trimdecode"
+readme = "README.md"
+keywords = ["audio", "decoder", "gapless", "ffmpeg", "dj"]
+categories = ["multimedia::audio", "multimedia::encoding"]
+exclude = [".github/"]
+
+[dependencies]
+symphonia = { version = "0.6", features = ["all-codecs", "all-formats"] }
