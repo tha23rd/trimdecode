@@ -116,6 +116,8 @@ pub struct Comparison {
     pub extra_frames: i64,
     /// The largest difference between aligned samples.
     pub max_diff: f32,
+    /// How many aligned samples differ by more than the tolerance.
+    pub beyond: usize,
     /// The shift (frames) that lines ours up with ffmpeg's best: positive when ours is late.
     pub lag: i64,
 }
@@ -125,38 +127,34 @@ pub struct Comparison {
 pub fn compare(ours: &[f32], theirs: &[f32], channels: usize, rate: u32, tolerance: f32) -> Comparison {
     let extra_frames = (ours.len() as i64 - theirs.len() as i64) / channels as i64;
     let n = ours.len().min(theirs.len());
-    let max_diff = ours[..n].iter().zip(&theirs[..n]).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
-    let lag = if max_diff <= tolerance { 0 } else { best_lag(ours, theirs, channels, rate) };
-    Comparison { extra_frames, max_diff, lag }
+    let diffs = || ours[..n].iter().zip(&theirs[..n]).map(|(a, b)| (a - b).abs());
+    let max_diff = diffs().fold(0.0f32, f32::max);
+    let beyond = diffs().filter(|d| *d > tolerance).count();
+    let lag = if max_diff <= tolerance { 0 } else { lag(ours, theirs, channels, rate) };
+    Comparison { extra_frames, max_diff, beyond, lag }
 }
 
 /// The shift within ±50 ms that best lines up the two signals' first channel, over the
-/// loudest half second of their first 30 s.
-fn best_lag(ours: &[f32], theirs: &[f32], channels: usize, rate: u32) -> i64 {
+/// loudest half second of their first 30 s: 0 when they are on the same timeline.
+pub fn lag(ours: &[f32], theirs: &[f32], channels: usize, rate: u32) -> i64 {
     let a: Vec<f32> = ours.iter().step_by(channels).copied().collect();
     let b: Vec<f32> = theirs.iter().step_by(channels).copied().collect();
     let max_lag = (rate / 20) as i64;
     let win = (rate / 2) as usize;
     let limit = b.len().min(a.len()).min(30 * rate as usize).saturating_sub(win + max_lag as usize);
+    let energy = |s: usize| b[s..(s + win).min(b.len())].iter().map(|v| v * v).sum::<f32>();
     let start = (max_lag as usize..limit.max(max_lag as usize + 1))
         .step_by(win)
-        .max_by(|&x, &y| {
-            let e = |s: usize| b[s..(s + win).min(b.len())].iter().map(|v| v * v).sum::<f32>();
-            e(x).total_cmp(&e(y))
-        })
+        .max_by(|&x, &y| energy(x).total_cmp(&energy(y)))
         .unwrap_or(0);
-    (-max_lag..=max_lag)
-        .min_by(|&l, &m| {
-            let ssd = |lag: i64| {
-                (0..win)
-                    .filter_map(|i| {
-                        let j = start as i64 + i as i64 + lag;
-                        (j >= 0 && (j as usize) < a.len() && start + i < b.len())
-                            .then(|| (a[j as usize] - b[start + i]).powi(2))
-                    })
-                    .sum::<f32>()
-            };
-            ssd(l).total_cmp(&ssd(m))
-        })
-        .unwrap_or(0)
+    let ssd = |lag: i64| {
+        (0..win)
+            .filter_map(|i| {
+                let j = start as i64 + i as i64 + lag;
+                (j >= 0 && (j as usize) < a.len() && start + i < b.len())
+                    .then(|| (a[j as usize] - b[start + i]).powi(2))
+            })
+            .sum::<f32>()
+    };
+    (-max_lag..=max_lag).map(|l| (l, ssd(l))).min_by(|x, y| x.1.total_cmp(&y.1)).map_or(0, |(l, _)| l)
 }

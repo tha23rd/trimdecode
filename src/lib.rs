@@ -34,7 +34,11 @@
 //! This matters wherever a time is stored apart from the audio: beat grids, cue points and
 //! loops in DJ software, labels, subtitles, alignments. DJ software stores them on this
 //! trimmed timeline; a decoder that keeps the delay puts every one of them 25-50 ms late.
-//! The tests check the timeline against ffmpeg, sample for sample, for every format.
+//! The tests check the timeline against ffmpeg, sample for sample, format by format.
+//!
+//! Known gaps (see the README): AAC in an MP4 whose edit list says to skip the priming keeps
+//! it (Symphonia does not apply edit lists yet), and some MP3s without a LAME/Xing header end
+//! one frame (1152 samples) before ffmpeg's decode of them; their starts line up.
 //!
 //! # Formats
 //!

@@ -12,4 +12,6 @@ own. Its mono decode gives the same samples as beatgrid 0.1's, bit for bit.
 - `downmix` and `downmix_into`: stereo to mono as `ffmpeg -ac 1` mixes it.
 - Errors with a kind and the file they are about.
 - Tests against ffmpeg format by format, and on your own files (`TRIMDECODE_CORPUS`).
-- Known gap: AAC in MP4 keeps its priming samples (Symphonia does not apply the edit list).
+- Known gaps: AAC in MP4 with an edit list keeps its priming samples (Symphonia does not apply
+  the edit list); some MP3s without a LAME/Xing header end one frame before ffmpeg's decode.
+- Measured on 375 real files: every one starts on ffmpeg's sample; 361 match it throughout.

@@ -71,29 +71,40 @@ corrupt packet is skipped, as ffmpeg skips it.
 
 ## The timeline, format by format
 
-Checked against ffmpeg 8 by `tests/ffmpeg_parity.rs` (fixtures encoded by ffmpeg from a
-synthetic signal): the same number of frames, no offset, and the samples below.
+Checked against ffmpeg 8 two ways: `tests/ffmpeg_parity.rs` decodes fixtures that ffmpeg
+encodes from a synthetic signal, and `tests/corpus.rs` decodes real files (the numbers below
+are from 375 of them: 315 MP3, 21 FLAC, 11 Ogg Vorbis, 11 WAV, 10 AAC and 4 ALAC in M4A,
+3 AIFF).
 
 | format | trimmed | against ffmpeg |
 |---|---|---|
-| MP3 with a LAME or Xing header | the declared delay (plus the decoder's 529) and padding | same frames; samples within 2e-6 |
-| MP3 without one | the decoder's 529 samples, as ffmpeg (nothing says more) | same frames; samples within 2e-6 |
-| Ogg Vorbis | as the granule positions say | same frames; samples within 3e-7 |
+| MP3 with a LAME or Xing header | the declared delay (plus the decoder's 529) and padding | the same frames; samples within 2e-6 (fixtures), 1.3e-5 (real files) |
+| MP3 without one | the decoder's 529 samples, as ffmpeg (nothing says more) | the same start; some files end one frame early (below) |
+| Ogg Vorbis | as the granule positions say | the same frames; samples within 6e-7 |
 | FLAC, WAV, AIFF, ALAC in MP4 | nothing to trim | identical, bit for bit |
-| AAC in MP4/M4A | **not yet: see below** | the priming samples are kept |
+| AAC in MP4/M4A | as ffmpeg when the file has no edit list | the same frames, within 3.3e-5; with an edit list, see below |
 
-### Known gap: AAC in MP4
+**Every one of the 375 real files starts on the same sample as ffmpeg's decode.** 361 match
+it all the way through. The other 14 are MP3s, and their times still line up:
 
-Symphonia 0.6 reads an MP4's edit list but does not apply it, so the AAC encoder's priming
-samples stay at the start: 1024 for ffmpeg's and most encoders, 2112 for Apple's. Decoded
-AAC is that much (23-48 ms) late against ffmpeg's timeline; the rest of the audio is the same
-within 2e-3 (Symphonia's and ffmpeg's AAC decoders round differently). `Info::delay` is
-`None` for these files. The parity test pins this, so a fix shows up as a test to update.
+- 12 end one MP3 frame (1152 samples, 26 ms) before ffmpeg's decode: 11 without a LAME or
+  Xing header, and one damaged file. Everything before that last frame matches.
+- 2 loud, clipping masters differ by up to 5e-3 in under 1% of their frames, where the two
+  MP3 decoders round very large values differently.
+
+### Known gap: AAC in MP4 with an edit list
+
+An MP4 can say, in its edit list, how many priming samples to skip; ffmpeg's own AAC encoder
+and Apple's write one (1024 or 2112 samples). Symphonia 0.6 reads the edit list but does not
+apply it, so those samples stay at the start: decoded AAC from such a file is 23-48 ms late
+against ffmpeg's timeline, and the rest is the same within 3e-5 (`Info::delay` is `None`). The
+parity test pins this, so a fix shows up as a test to update. AAC files without an edit list,
+as all ten real ones above, are on ffmpeg's timeline.
 
 It is left so in 0.1 on purpose: the projects trimdecode was extracted from stored results
 on exactly this decode, and changing it changes their AAC results. Trimming the edit list's
-media time is the planned fix. Until then, if AAC timing matters, decode AAC with ffmpeg or
-shift by the priming yourself.
+media time is the planned fix. Until then, if AAC timing matters, decode such files with
+ffmpeg or shift by the priming yourself.
 
 ## Testing
 
